@@ -1,0 +1,72 @@
+[
+    {
+        "name": "Wireless Mouse",
+        "price": 24.99,
+        "category": "Electronics",
+        "description": "Ergonomic 2.4GHz wireless mouse with USB receiver",
+        "stock": 150
+    },
+    {
+        "name": "Mechanical Keyboard",
+        "price": 89.9,
+        "category": "Electronics",
+        "description": "RGB backlit mechanical keyboard with blue switches",
+        "stock": 60
+    },
+    {
+        "name": "27-inch Monitor",
+        "price": 229,
+        "category": "Electronics",
+        "description": "Full HD IPS monitor, 75Hz",
+        "stock": 25
+    },
+    {
+        "name": "Cotton T-Shirt",
+        "price": 15,
+        "category": "Clothing",
+        "description": "100% organic cotton, unisex",
+        "stock": 300
+    },
+    {
+        "name": "Denim Jacket",
+        "price": 69.5,
+        "category": "Clothing",
+        "description": "Classic blue denim jacket",
+        "stock": 40
+    },
+    {
+        "name": "Running Shoes",
+        "price": 119.99,
+        "category": "Sports",
+        "description": "Lightweight running shoes with cushioned sole",
+        "stock": 80
+    },
+    {
+        "name": "Yoga Mat",
+        "price": 29.9,
+        "category": "Sports",
+        "description": "Non-slip 6mm yoga mat",
+        "stock": 120
+    },
+    {
+        "name": "Coffee Maker",
+        "price": 49.99,
+        "category": "Home",
+        "description": "12-cup programmable drip coffee maker",
+        "stock": 35
+    },
+    {
+        "name": "Desk Lamp",
+        "price": 19.9,
+        "category": "Home",
+        "description": "LED desk lamp with adjustable brightness",
+        "stock": 90
+    },
+    {
+        "name": "JavaScript: The Good Parts",
+        "price": 22.5,
+        "category": "Books",
+        "description": "Douglas Crockford's classic JavaScript book",
+        "stock": 55
+    }
+]
