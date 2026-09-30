@@ -54,7 +54,6 @@ async function startServer(){
             await database.command({ collMod: "products", validator: productSchema });
         }
     } catch (err) {
-        // The DB user may lack the collMod/createCollection privilege (e.g. on Atlas)
         console.warn(`Could not apply schema validator: ${err.message}. Falling back to app-level validation only.`);
     }
 
