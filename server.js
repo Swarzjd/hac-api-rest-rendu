@@ -1,6 +1,8 @@
 const { connectToMongoDB } = require('./src/mongo-server');
 const { ObjectId } = require('mongodb');
 const express = require('express');
+const jwt = require('jsonwebtoken');
+const fs = require("fs");
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -10,22 +12,16 @@ let database;
 
 const REQUIRED_FIELDS = ["name", "price", "category"];
 
+const schemaProducts = JSON.parse(
+    fs.readFileSync("./schema/product.json", "utf8")
+)
+
 const productSchema = {
-    $jsonSchema: {
-        bsonType: "object",
-        required: REQUIRED_FIELDS,
-        properties: {
-            name:     { bsonType: "string", minLength: 1, description: "label of the product (KEY)" },
-            price:    { bsonType: ["double", "int", "long", "decimal"], minimum: 0, description: "price of the product and must be a positive number (KEY)" },
-            category: { bsonType: "string", minLength: 1, description: "category type of the product (KEY)" },
-            description: { bsonType: "string", minLength: 1, description: "description of the product" },
-            stock: { bsonType: "int", minimum: 0, description: "stock of the product" }
-        }
-    }
-};
+    $jsonSchema : schemaProducts
+}
 
 function validateProduct(body) {
-    const missing = REQUIRED_FIELDS.filter(
+    const missing = schemaProducts.required.filter(
         f => body[f] === undefined || body[f] === null || body[f] === ""
     );
     if (missing.length) return `Missing required fields: ${missing.join(", ")}`;
