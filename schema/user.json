@@ -1,0 +1,40 @@
+{
+  "bsonType": "object",
+  "required": ["name", "surname", "email", "password", "birthDate"],
+  "properties": {
+    "name": {
+      "bsonType": "string",
+      "minLength": 1,
+      "description": "user name (KEY)"
+    },
+    "name2": {
+      "bsonType": "string",
+      "minLength": 1,
+      "description": "user second name"
+    },
+    "name3": {
+      "bsonType": "string",
+      "minLength": 1,
+      "description": "user third name"
+    },
+    "surname": {
+      "bsonType": "string",
+      "minLength": 1,
+      "description": "surname of the user (KEY)"
+    },
+    "email": {
+      "bsonType": "string",
+      "minLength": 1,
+      "description": "email of the user (KEY)"
+    },
+    "password": {
+      "bsonType": "string",
+      "minLength": 12,
+      "description": "hash of the password (KEY)"
+    },
+    "birthDate": {
+      "bsonType": "date",
+      "description": "birth date of the user (KEY)"
+    }
+  }
+}
