@@ -1,4 +1,8 @@
-const { connectToMongoDB } = require('./config/mongo-server');
+const { connectToMongoDB } = require('./src/config/mongo-server');
+const { validator, validateSchema } = require('./src/middleware/validator');
+const { handleError } = require('./src/middleware/errorhandler');
+const {authenticateToken} = require("./src/middleware/tokenVeryfier");
+
 const { ObjectId } = require('mongodb');
 const express = require('express');
 const jwt = require('jsonwebtoken');
@@ -10,10 +14,10 @@ const port = process.env.PORT || 8080;
 app.use(express.json());
 
 const schemaProducts = JSON.parse(
-    fs.readFileSync("./schema/product.json", "utf8")
+    fs.readFileSync("./src/schema/product.json", "utf8")
 )
 const schemaUsers = JSON.parse(
-    fs.readFileSync("./schema/user.json", "utf8")
+    fs.readFileSync("./src/schema/user.json", "utf8")
 )
 
 const productSchemaMongo = {
@@ -22,156 +26,6 @@ const productSchemaMongo = {
 
 const userSchemaMongo = {
     $jsonSchema : schemaUsers
-}
-
-function validator(body, schema) {
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-        return "Request body must be an object";
-    }
-    const missing = (schema.required ?? []).filter(
-        field =>
-            body[field] === undefined ||
-            body[field] === null ||
-            body[field] === ""
-    );
-
-    if (missing.length > 0) {
-        return `Missing required fields: ${missing.join(", ")}`;
-    }
-
-    for (const [field, rules] of Object.entries(schema.properties ?? {})) {
-        const value = body[field];
-
-        if (value === undefined) continue;
-
-        const types = Array.isArray(rules.bsonType)
-            ? rules.bsonType
-            : [rules.bsonType];
-
-        if (value === null) {
-            return `${field} cannot be null`;
-        }
-
-        if (types.length && !types.some(type => {
-            switch (type) {
-                case "string":
-                    return typeof value === "string";
-                case "int":
-                    return Number.isInteger(value) &&
-                        value >= -2147483648 &&
-                        value <= 2147483647;
-                case "long":
-                case "double":
-                case "decimal":
-                    return typeof value === "number" &&
-                        Number.isFinite(value);
-                case "bool":
-                    return typeof value === "boolean";
-                case "object":
-                    return typeof value === "object" &&
-                        !Array.isArray(value);
-                case "array":
-                    return Array.isArray(value);
-                default:
-                    return true;
-            }
-        })) {
-            return `${field} has an invalid type`;
-        }
-
-        if (
-            typeof value === "string" &&
-            rules.minLength !== undefined &&
-            value.length < rules.minLength
-        ) {
-            return `${field} must contain at least ${rules.minLength} characters`;
-        }
-
-        if (
-            typeof value === "number" &&
-            rules.minimum !== undefined &&
-            value < rules.minimum
-        ) {
-            return `${field} must be at least ${rules.minimum}`;
-        }
-    }
-
-    return null;
-}
-
-function handleError(err, res) {
-    // 121 = DocumentValidationFailed (rejected by the collection's $jsonSchema)
-    if (err.code === 121) {
-        return res.status(400).json({ error: "Document failed validation", details: err.errInfo });
-    }
-    console.error(err);
-    res.status(500).json({error: "Internal server error"});
-}
-
-async function validateSchema(client, DB_NAME, collection, schemaMongo) {
-    const database = client.db(DB_NAME);
-
-    try {
-        const existing = await database
-            .listCollections({ name: collection })
-            .toArray();
-
-        if (existing.length === 0) {
-            await database.createCollection(collection, {
-                validator: schemaMongo,
-                validationLevel: "strict",
-                validationAction: "error"
-            });
-        } else {
-            await database.command({
-                collMod: collection,
-                validator: schemaMongo,
-                validationLevel: "strict",
-                validationAction: "error"
-            });
-        }
-    } catch (err) {
-        console.warn(
-            `Could not apply MongoDB schema to ${collection}: ${err.message}.`
-        );
-        throw err;
-    }
-
-    return database;
-}
-
-
-function authenticateToken(req, res, next) {
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith("Bearer ")
-        ? authHeader.slice(7)
-        : null;
-
-    if (!token) {
-        return res.status(401).json({
-            error: "Authentication token required"
-        });
-    }
-
-    if (!process.env.JWT_SECRET) {
-        return res.status(500).json({
-            error: "Authentication is not configured"
-        });
-    }
-
-    try {
-        req.user = jwt.verify(
-            token,
-            process.env.JWT_SECRET,
-            { algorithms: ["HS256"] }
-        );
-
-        next();
-    } catch (err) {
-        return res.status(401).json({
-            error: "Invalid or expired token"
-        });
-    }
 }
 
 async function startServer(){
@@ -194,7 +48,7 @@ async function startServer(){
     const productsCollection = productsDB.collection("products");
     const usersCollection = usersDB.collection("users");
 
-    app.post("/products", async (req, res) => {
+    app.post("/products", authenticateToken,async (req, res) => {
         try{
             const error = validator(req.body, schemaProducts);
             if (error) {
@@ -508,4 +362,7 @@ async function startServer(){
     app.listen(port, () => console.log(`Server running on port ${port}`))
 }
 
-startServer()
+startServer().catch(err => {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+});
