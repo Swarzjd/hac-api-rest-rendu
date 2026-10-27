@@ -15,9 +15,11 @@ const productSchema = {
         bsonType: "object",
         required: REQUIRED_FIELDS,
         properties: {
-            name:     { bsonType: "string", minLength: 1, description: "name is required and must be a non-empty string" },
-            price:    { bsonType: ["double", "int", "long", "decimal"], minimum: 0, description: "price is required and must be a positive number" },
-            category: { bsonType: "string", minLength: 1, description: "category is required and must be a non-empty string" }
+            name:     { bsonType: "string", minLength: 1, description: "label of the product (KEY)" },
+            price:    { bsonType: ["double", "int", "long", "decimal"], minimum: 0, description: "price of the product and must be a positive number (KEY)" },
+            category: { bsonType: "string", minLength: 1, description: "category type of the product (KEY)" },
+            description: { bsonType: "string", minLength: 1, description: "description of the product" },
+            stock: { bsonType: "int", minimum: 0, description: "stock of the product" }
         }
     }
 };
@@ -196,7 +198,7 @@ async function startServer(){
             if (result.deletedCount === 0) {
                 return res.status(404).json({ error: "Product not found" });
             }
-            res.status(200).json({ message: "Product deleted successfully" });
+            res.status(204).json({ message: "Product deleted successfully" });
         }
         catch(err){
             console.error(err);
