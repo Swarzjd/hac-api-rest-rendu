@@ -10,8 +10,7 @@ export function validator(body, schema) {
     );
 
     let errorMessage = {
-        "failures": "",
-        "schema" : schema
+        "failures": ""
     }
 
     if (missing.length > 0) {
