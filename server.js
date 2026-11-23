@@ -1,7 +1,7 @@
-const { connectToMongoDB } = require('./src/config/mongo-server');
+const {connectToMongoDB, disconnectFromMongoDB} = require('./src/config/mongo-server');
 const { validator, validateSchema } = require('./src/middleware/validator');
 const { handleError } = require('./src/middleware/errorhandler');
-const {authenticateToken} = require("./src/middleware/tokenVeryfier");
+const { authenticateToken } = require('./src/middleware/tokenVeryfier');
 const { requireRole } = require('./src/middleware/actionValidator');
 
 const { ObjectId } = require('mongodb');
@@ -12,68 +12,82 @@ const bcrypt = require("bcrypt");
 
 const app = express();
 const port = process.env.PORT || 8080;
+
 app.use(express.json());
+
+let server;
+let mongoClient;
+let isShuttingDown = false;
 
 const schemaProducts = JSON.parse(
     fs.readFileSync("./src/schema/product.json", "utf8")
-)
+);
+
 const schemaUsers = JSON.parse(
     fs.readFileSync("./src/schema/user.json", "utf8")
-)
+);
 
 const schemaTov = JSON.parse(
     fs.readFileSync("./src/schema/tov.json", "utf8")
-)
+);
 
 const productSchemaMongo = {
-    $jsonSchema : schemaProducts
-}
+    $jsonSchema: schemaProducts
+};
 
 const userSchemaMongo = {
-    $jsonSchema : schemaUsers
-}
+    $jsonSchema: schemaUsers
+};
 
 const tovSchemaMongo = {
-    $jsonSchema : schemaTov
-}
+    $jsonSchema: schemaTov
+};
 
-async function startServer(){
-    const client = await connectToMongoDB();
 
+// START SERVER
+async function startServer() {
+
+    mongoClient = await connectToMongoDB();
 
     const productsDB = await validateSchema(
-        client,
+        mongoClient,
         process.env.DB_NAME_PRODUCTS,
         "products",
         productSchemaMongo
     );
 
     const usersDB = await validateSchema(
-        client,
+        mongoClient,
         process.env.DB_NAME_USERS,
         "users",
         userSchemaMongo
     );
 
     const tovDB = await validateSchema(
-        client,
+        mongoClient,
         process.env.DB_NAME_TOV,
         "tableOfValues",
         tovSchemaMongo
-    )
+    );
 
     const productsCollection = productsDB.collection("products");
     const usersCollection = usersDB.collection("users");
-    const tovCollection = tovDB.collection("tableOfValues")
+    const tovCollection = tovDB.collection("tableOfValues");
 
-    await usersCollection.createIndex({ email: 1 }, { unique: true });
+    await usersCollection.createIndex(
+        { email: 1 },
+        { unique: true }
+    );
 
-    const canWrite  = requireRole(usersCollection, ["1", "2"]);
+    const canWrite = requireRole(usersCollection, ["1", "2"]);
     const adminOnly = requireRole(usersCollection, ["1"]);
 
-    app.post("/products", authenticateToken, canWrite,async (req, res) => {
-        try{
+
+    // CREATE PRODUCT
+    app.post("/products", authenticateToken, canWrite, async (req, res) => {
+        try {
             const error = validator(req.body, schemaProducts);
+
             if (error) {
                 return res.status(400).json({ error });
             }
@@ -83,14 +97,21 @@ async function startServer(){
                 createdAt: new Date(),
                 updatedAt: new Date()
             };
+
             const result = await productsCollection.insertOne(product);
-            res.status(201).json({ message: "Product created successfully", productId: result.insertedId });
-        }
-        catch(err){
+
+            res.status(201).json({
+                message: "Product created successfully",
+                productId: result.insertedId
+            });
+
+        } catch (err) {
             handleError(err, res);
         }
-    })
+    });
 
+
+    // REGISTER USER
     app.post("/users/register", async (req, res) => {
         try {
             const {
@@ -119,8 +140,10 @@ async function startServer(){
                 });
             }
 
-            if (typeof email !== "string" ||
-                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+            if (
+                typeof email !== "string" ||
+                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+            ) {
                 return res.status(400).json({
                     error: "A valid email is required"
                 });
@@ -157,9 +180,9 @@ async function startServer(){
             );
 
             const userType = {
-                tableOfValuesCode : "3",
-                tableOfValuesTable : "userType"
-            }
+                tableOfValuesCode: "3",
+                tableOfValuesTable: "userType"
+            };
 
             const user = {
                 name: name.trim(),
@@ -169,7 +192,7 @@ async function startServer(){
                 birthDate: parsedBirthDate,
                 ...(name2 !== undefined && { name2 }),
                 ...(name3 !== undefined && { name3 }),
-                userType : userType,
+                userType: userType,
                 createdAt: new Date(),
                 updatedAt: new Date()
             };
@@ -180,6 +203,7 @@ async function startServer(){
                 message: "User registered successfully",
                 userId: result.insertedId
             });
+
         } catch (err) {
             if (err.code === 11000) {
                 return res.status(409).json({
@@ -191,6 +215,8 @@ async function startServer(){
         }
     });
 
+
+    // LOGIN USER
     app.post("/users/login", async (req, res) => {
         try {
             const { email, password } = req.body;
@@ -234,7 +260,9 @@ async function startServer(){
             const token = jwt.sign(
                 { sub: user._id.toString() },
                 process.env.JWT_SECRET,
-                { expiresIn: process.env.JWT_EXPIRES_IN || "1h" }
+                {
+                    expiresIn: process.env.JWT_EXPIRES_IN || "1h"
+                }
             );
 
             const decoded = jwt.decode(token);
@@ -263,49 +291,76 @@ async function startServer(){
     });
 
     app.get("/products", async (req, res) => {
-        try{
+        try {
             const products = await productsCollection.find({}).toArray();
             res.status(200).json(products);
-        }
-        catch(err){
-            console.error(err);
-            res.status(500).json({error: "Internal server error"});
-        }
-    })
 
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({
+                error: "Internal server error"
+            });
+        }
+    });
+
+
+    // GET PRODUCT BY ID
     app.get("/products/:id", async (req, res) => {
-        try{
-            const { id } = req.params;
-            if (!ObjectId.isValid(id)) {
-                return res.status(400).json({ error: "Invalid product ID" });
-            }
-            const product = await productsCollection.findOne({ _id: new ObjectId(id) });
-            if (!product) {
-                return res.status(404).json({ error: "Product not found" });
-            }
-            res.status(200).json(product);
-        }
-        catch(err){
-            console.error(err);
-            res.status(500).json({error: "Internal server error"});
-        }
-    })
-
-    app.patch("/products/:id", authenticateToken, canWrite,async (req, res) => {
         try {
             const { id } = req.params;
+
             if (!ObjectId.isValid(id)) {
-                return res.status(400).json({ error: "Invalid product ID" });
+                return res.status(400).json({
+                    error: "Invalid product ID"
+                });
+            }
+
+            const product = await productsCollection.findOne({
+                _id: new ObjectId(id)
+            });
+
+            if (!product) {
+                return res.status(404).json({
+                    error: "Product not found"
+                });
+            }
+
+            res.status(200).json(product);
+
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({
+                error: "Internal server error"
+            });
+        }
+    });
+
+
+    // PATCH PRODUCT
+    app.patch("/products/:id", authenticateToken, canWrite, async (req, res) => {
+        try {
+            const { id } = req.params;
+
+            if (!ObjectId.isValid(id)) {
+                return res.status(400).json({
+                    error: "Invalid product ID"
+                });
             }
 
             const updates = { ...req.body };
             delete updates._id;
 
             if (Object.keys(updates).length === 0) {
-                return res.status(400).json({ error: "No fields provided for update" });
+                return res.status(400).json({
+                    error: "No fields provided for update"
+                });
             }
 
-            const error = validator(updates, { ...schemaProducts, required: [] });
+            const error = validator(
+                updates,
+                { ...schemaProducts, required: [] }
+            );
+
             if (error) {
                 return res.status(400).json({ error });
             }
@@ -321,24 +376,32 @@ async function startServer(){
             );
 
             if (result.matchedCount === 0) {
-                return res.status(404).json({ error: "Product not found" });
+                return res.status(404).json({
+                    error: "Product not found"
+                });
             }
 
-            res.status(200).json({ message: "Product updated successfully" });
-        }
-        catch(err){
+            res.status(200).json({
+                message: "Product updated successfully"
+            });
+
+        } catch (err) {
             handleError(err, res);
         }
-    })
+    });
 
-    app.put("/products/:id", authenticateToken, canWrite,async (req, res) => {
-        try{
+    app.put("/products/:id", authenticateToken, canWrite, async (req, res) => {
+        try {
             const { id } = req.params;
+
             if (!ObjectId.isValid(id)) {
-                return res.status(400).json({ error: "Invalid product ID" });
+                return res.status(400).json({
+                    error: "Invalid product ID"
+                });
             }
 
             const error = validator(req.body, schemaProducts);
+
             if (error) {
                 return res.status(400).json({ error });
             }
@@ -346,7 +409,9 @@ async function startServer(){
             const updatedData = { ...req.body };
             delete updatedData._id;
 
-            const existingProduct = await productsCollection.findOne({ _id: new ObjectId(id) });
+            const existingProduct = await productsCollection.findOne({
+                _id: new ObjectId(id)
+            });
 
             if (!existingProduct) {
                 const product = {
@@ -355,8 +420,13 @@ async function startServer(){
                     createdAt: new Date(),
                     updatedAt: new Date()
                 };
+
                 const result = await productsCollection.insertOne(product);
-                return res.status(201).json({ message: "Product created successfully", productId: result.insertedId });
+
+                return res.status(201).json({
+                    message: "Product created successfully",
+                    productId: result.insertedId
+                });
             }
 
             const replacementDocument = {
@@ -365,37 +435,103 @@ async function startServer(){
                 updatedAt: new Date()
             };
 
-            await productsCollection.replaceOne({ _id: new ObjectId(id) }, replacementDocument);
+            await productsCollection.replaceOne(
+                { _id: new ObjectId(id) },
+                replacementDocument
+            );
 
-            res.status(200).json({ message: "Product replaced successfully" });
-        }
-        catch(err){
+            res.status(200).json({
+                message: "Product replaced successfully"
+            });
+
+        } catch (err) {
             handleError(err, res);
         }
-    })
+    });
 
-    app.delete("/products/:id", authenticateToken, adminOnly,async (req, res) => {
+
+    app.delete("/products/:id", authenticateToken, adminOnly, async (req, res) => {
         try {
             const { id } = req.params;
-            if (!ObjectId.isValid(id)) {
-                return res.status(400).json({ error: "Invalid product ID" });
-            }
-            const result = await productsCollection.deleteOne({ _id: new ObjectId(id) });
-            if (result.deletedCount === 0) {
-                return res.status(404).json({ error: "Product not found" });
-            }
-            res.status(204).send();
-        }
-        catch(err){
-            console.error(err);
-            res.status(500).json({error: "Internal server error"});
-        }
-    })
 
-    app.listen(port, () => console.log(`Server running on port ${port}`))
+            if (!ObjectId.isValid(id)) {
+                return res.status(400).json({
+                    error: "Invalid product ID"
+                });
+            }
+
+            const result = await productsCollection.deleteOne({
+                _id: new ObjectId(id)
+            });
+
+            if (result.deletedCount === 0) {
+                return res.status(404).json({
+                    error: "Product not found"
+                });
+            }
+
+            res.status(204).send();
+
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({
+                error: "Internal server error"
+            });
+        }
+    });
+
+
+    // START LISTENING ONLY AFTER MONGODB IS READY
+    server = app.listen(port, () => {
+        console.log(`Server running on port ${port}`);
+    });
+
 }
 
-startServer().catch(err => {
+async function shutdown(exitCode = 0) {
+
+    if (isShuttingDown) {
+        return;
+    }
+
+    isShuttingDown = true;
+
+    console.log("Shutting down server...");
+
+    try {
+
+        if (server) {
+            await new Promise((resolve, reject) => {
+                server.close((err) => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve();
+                    }
+                });
+            });
+        }
+
+        if (mongoClient) {
+            await disconnectFromMongoDB();
+            console.log("MongoDB disconnected successfully");
+        }
+
+    } catch (err) {
+        console.error("Error during shutdown:", err);
+        exitCode = 1;
+    }
+
+    process.exitCode = exitCode;
+}
+
+process.on("SIGINT", () => shutdown(0));
+process.on("SIGTERM", () => shutdown(0));
+
+startServer().catch(async (err) => {
+
     console.error("Failed to start server:", err);
-    process.exit(1);
+
+    await shutdown(1);
+
 });
