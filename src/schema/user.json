@@ -29,6 +29,7 @@
     },
     "userType": {
       "bsonType": "object",
+      "required": ["tableOfValuesCode", "tableOfValuesTable"],
       "properties": {
         "tableOfValuesCode": {
           "bsonType": "string",
