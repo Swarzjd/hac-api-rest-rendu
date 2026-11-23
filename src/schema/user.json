@@ -27,6 +27,19 @@
       "minLength": 1,
       "description": "email of the user (KEY)"
     },
+    "userType": {
+      "bsonType": "object",
+      "properties": {
+        "tableOfValuesCode": {
+          "bsonType": "string",
+          "description": "Code of the user Type"
+        },
+        "tableOfValuesTable": {
+          "bsonType": "string",
+          "description": "Table of values referenced"
+        }
+      }
+    },
     "password": {
       "bsonType": "string",
       "minLength": 12,

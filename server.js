@@ -2,6 +2,7 @@ const { connectToMongoDB } = require('./src/config/mongo-server');
 const { validator, validateSchema } = require('./src/middleware/validator');
 const { handleError } = require('./src/middleware/errorhandler');
 const {authenticateToken} = require("./src/middleware/tokenVeryfier");
+const { requireRole } = require('./src/middleware/actionValidator');
 
 const { ObjectId } = require('mongodb');
 const express = require('express');
@@ -20,6 +21,10 @@ const schemaUsers = JSON.parse(
     fs.readFileSync("./src/schema/user.json", "utf8")
 )
 
+const schemaTov = JSON.parse(
+    fs.readFileSync("./src/schema/tov.json", "utf8")
+)
+
 const productSchemaMongo = {
     $jsonSchema : schemaProducts
 }
@@ -28,8 +33,13 @@ const userSchemaMongo = {
     $jsonSchema : schemaUsers
 }
 
+const tovSchemaMongo = {
+    $jsonSchema : schemaTov
+}
+
 async function startServer(){
     const client = await connectToMongoDB();
+
 
     const productsDB = await validateSchema(
         client,
@@ -45,10 +55,23 @@ async function startServer(){
         userSchemaMongo
     );
 
+    const tovDB = await validateSchema(
+        client,
+        process.env.DB_NAME_TOV,
+        "tableOfValues",
+        tovSchemaMongo
+    )
+
     const productsCollection = productsDB.collection("products");
     const usersCollection = usersDB.collection("users");
+    const tovCollection = tovDB.collection("tableOfValues")
 
-    app.post("/products", authenticateToken,async (req, res) => {
+    await usersCollection.createIndex({ email: 1 }, { unique: true });
+
+    const canWrite  = requireRole(usersCollection, ["1", "2"]);
+    const adminOnly = requireRole(usersCollection, ["1"]);
+
+    app.post("/products", authenticateToken, canWrite,async (req, res) => {
         try{
             const error = validator(req.body, schemaProducts);
             if (error) {
@@ -103,7 +126,6 @@ async function startServer(){
                 });
             }
 
-            // Convert the JSON date string into a Date
             const parsedBirthDate = new Date(birthDate);
 
             if (
@@ -131,8 +153,13 @@ async function startServer(){
 
             const hashedPassword = await bcrypt.hash(
                 password,
-                process.env.SALT_ROUNDS
+                Number(process.env.SALT_ROUNDS) || 12
             );
+
+            const userType = {
+                tableOfValuesCode : "3",
+                tableOfValuesTable : "userType"
+            }
 
             const user = {
                 name: name.trim(),
@@ -142,6 +169,7 @@ async function startServer(){
                 birthDate: parsedBirthDate,
                 ...(name2 !== undefined && { name2 }),
                 ...(name3 !== undefined && { name3 }),
+                userType : userType,
                 createdAt: new Date(),
                 updatedAt: new Date()
             };
@@ -263,7 +291,7 @@ async function startServer(){
         }
     })
 
-    app.patch("/products/:id", authenticateToken,async (req, res) => {
+    app.patch("/products/:id", authenticateToken, canWrite,async (req, res) => {
         try {
             const { id } = req.params;
             if (!ObjectId.isValid(id)) {
@@ -275,6 +303,11 @@ async function startServer(){
 
             if (Object.keys(updates).length === 0) {
                 return res.status(400).json({ error: "No fields provided for update" });
+            }
+
+            const error = validator(updates, { ...schemaProducts, required: [] });
+            if (error) {
+                return res.status(400).json({ error });
             }
 
             const result = await productsCollection.updateOne(
@@ -298,14 +331,14 @@ async function startServer(){
         }
     })
 
-    app.put("/products/:id", authenticateToken,async (req, res) => {
+    app.put("/products/:id", authenticateToken, canWrite,async (req, res) => {
         try{
             const { id } = req.params;
             if (!ObjectId.isValid(id)) {
                 return res.status(400).json({ error: "Invalid product ID" });
             }
 
-            const error = validator(req.body);
+            const error = validator(req.body, schemaProducts);
             if (error) {
                 return res.status(400).json({ error });
             }
@@ -341,7 +374,7 @@ async function startServer(){
         }
     })
 
-    app.delete("/products/:id", authenticateToken,async (req, res) => {
+    app.delete("/products/:id", authenticateToken, adminOnly,async (req, res) => {
         try {
             const { id } = req.params;
             if (!ObjectId.isValid(id)) {
@@ -351,7 +384,7 @@ async function startServer(){
             if (result.deletedCount === 0) {
                 return res.status(404).json({ error: "Product not found" });
             }
-            res.status(204).json({ message: "Product deleted successfully" });
+            res.status(204).send();
         }
         catch(err){
             console.error(err);

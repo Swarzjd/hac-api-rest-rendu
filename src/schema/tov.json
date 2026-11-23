@@ -1,0 +1,32 @@
+{
+  "bsonType": "object",
+  "required": ["tableOfValuesName", "tableOfValuesDefinition"],
+  "properties": {
+    "tableOfValuesName": {
+      "bsonType": "string",
+      "minLength": 1,
+      "description": "table name (KEY)"
+    },
+    "tableOfValuesDefinition": {
+      "bsonType": "array",
+      "minItems": 1,
+      "description": "list of values of the table",
+      "items": {
+        "bsonType": "object",
+        "required": ["tableOfValuesCode", "tableOfValuesTable"],
+        "properties": {
+          "tableOfValuesCode": {
+            "bsonType": "string",
+            "minLength": 1,
+            "description": "code of the value"
+          },
+          "tableOfValuesTable": {
+            "bsonType": "string",
+            "minLength": 1,
+            "description": "value of the table (e.g. ADMIN)"
+          }
+        }
+      }
+    }
+  }
+}
