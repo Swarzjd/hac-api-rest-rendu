@@ -9,8 +9,14 @@ export function validator(body, schema) {
             body[field] === ""
     );
 
+    let errorMessage = {
+        "failures": "",
+        "schema" : schema
+    }
+
     if (missing.length > 0) {
-        return `Missing required fields: ${missing.join(", ")}`;
+        errorMessage.failures = `Missing required fields: ${missing.join(", ")}`;
+        return errorMessage
     }
 
     for (const [field, rules] of Object.entries(schema.properties ?? {})) {
@@ -23,7 +29,8 @@ export function validator(body, schema) {
             : [rules.bsonType];
 
         if (value === null) {
-            return `${field} cannot be null`;
+            errorMessage.failures = `${field} cannot be null`
+            return errorMessage;
         }
 
         if (types.length && !types.some(type => {
@@ -50,7 +57,8 @@ export function validator(body, schema) {
                     return true;
             }
         })) {
-            return `${field} has an invalid type`;
+            errorMessage.failures = `${field} has an invalid type`;
+            return errorMessage;
         }
 
         if (
@@ -58,7 +66,8 @@ export function validator(body, schema) {
             rules.minLength !== undefined &&
             value.length < rules.minLength
         ) {
-            return `${field} must contain at least ${rules.minLength} characters`;
+            errorMessage.failures = `${field} must contain at least ${rules.minLength} characters`
+            return errorMessage;
         }
 
         if (
@@ -66,7 +75,8 @@ export function validator(body, schema) {
             rules.minimum !== undefined &&
             value < rules.minimum
         ) {
-            return `${field} must be at least ${rules.minimum}`;
+            errorMessage.failures = `${field} must be at least ${rules.minimum}`
+            return errorMessage;
         }
     }
 

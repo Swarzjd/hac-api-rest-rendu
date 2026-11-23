@@ -47,7 +47,6 @@ function createUserController(usersCollection, schemaUsers) {
                 });
             }
 
-            // Birth date validation
             const parsedBirthDate = new Date(birthDate);
 
             if (
@@ -63,7 +62,6 @@ function createUserController(usersCollection, schemaUsers) {
 
             const normalizedEmail = email.trim().toLowerCase();
 
-            // Check whether the email already exists
             const existingUser = await usersCollection.findOne({
                 email: normalizedEmail
             });
